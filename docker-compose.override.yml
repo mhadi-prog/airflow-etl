@@ -1,0 +1,48 @@
+# Extra services started by `astro dev start`, alongside the Airflow containers.
+services:
+  mongo:
+    image: mongo:7
+    container_name: currency_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db            # Persistent storage: data survives container restarts
+    networks:
+      - airflow                        # Docker networking: same network as Airflow, reachable as host "mongo"
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping').ok\" || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+    labels:
+      meta.docker.network: "airflow (shared with Airflow containers)"
+      meta.docker.persistent_storage: "named volume mongo_data -> /data/db"
+
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: currency_mongo_express
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://admin:admin123@mongo:27017/?authSource=admin
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+    ports:
+      - "8081:8081"
+    networks:
+      - airflow
+    labels:
+      meta.docker.network: "airflow (reaches MongoDB at mongo:27017)"
+      meta.docker.persistent_storage: "none needed (stateless UI; data lives in mongo_data)"
+
+volumes:
+  mongo_data:
+    labels:
+      meta.docker.persistent_storage: "MongoDB data directory"
